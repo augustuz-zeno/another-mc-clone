@@ -9,8 +9,6 @@ pub struct RaycastHit {
     pub block_pos: IVec3,
     /// Outward face normal of the hit face (one of ±X, ±Y, ±Z unit vectors).
     pub normal: IVec3,
-    /// Chunk that owns the hit block.
-    pub chunk_coord: IVec2,
 }
 
 pub struct World {
@@ -170,13 +168,7 @@ impl World {
             }
 
             if self.get_block_world(pos.x, pos.y, pos.z) != 0 {
-                let chunk_x = pos.x.div_euclid(CHUNK_SIZE as i32);
-                let chunk_z = pos.z.div_euclid(CHUNK_SIZE as i32);
-                return Some(RaycastHit {
-                    block_pos: pos,
-                    normal,
-                    chunk_coord: IVec2::new(chunk_x, chunk_z),
-                });
+                return Some(RaycastHit { block_pos: pos, normal });
             }
 
             // Advance to the nearest voxel boundary.
