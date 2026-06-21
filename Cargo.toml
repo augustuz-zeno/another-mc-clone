@@ -1,0 +1,14 @@
+[package]
+name = "rust-game"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wgpu = "23.0"
+winit = { version = "0.30", features = ["rwh_06"] }
+glam = "0.29"
+fastnoise-lite = "1.1.1"
+pollster = "0.3"
+bytemuck = { version = "1.16", features = ["derive"] }
+log = "0.4"
+env_logger = "0.10"
