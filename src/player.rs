@@ -7,6 +7,11 @@ use crate::world::World;
 const GRAVITY: f32 = -32.0;        // m/s²  (negative = downward)
 const JUMP_VELOCITY: f32 = 8.4;    // m/s   upward impulse on jump
 const MAX_FALL_SPEED: f32 = -50.0; // terminal velocity
+
+const BASE_SPEED: f32 = 4.317;
+const SPRINT_MULT: f32 = 1.3;
+const SNEAK_MULT: f32 = 0.3;
+
 const GROUND_ACCEL: f32 = 45.0;    // how fast you reach top speed
 const AIR_ACCEL: f32 = 5.0;        // less control in the air
 const GROUND_FRICTION: f32 = 10.0; // deceleration multiplier
@@ -15,33 +20,36 @@ const AIR_FRICTION: f32 = 1.0;     // horizontal drag in air
 // ── Player body dimensions ─────────────────────────────────────────────────────
 const PLAYER_HALF_W: f32 = 0.3;    // half-width in X and Z
 const PLAYER_HEIGHT: f32 = 1.8;    // total height
-const EYE_OFFSET: f32 = 1.6;       // camera eye above feet
+const EYE_OFFSET_STAND: f32 = 1.6; // camera eye above feet
+const EYE_OFFSET_SNEAK: f32 = 1.3; // camera eye when sneaking
 
 pub struct Player {
     pub camera: Camera,
-    pub speed: f32,
     pub sensitivity: f32,
     pub velocity: Vec3,
     pub on_ground: bool,
     pub sprinting: bool,
+    pub sneaking: bool,
     pub fov_multiplier: f32,
+    pub distance_walked: f32,
+    pub eye_offset: f32,
 }
 
 impl Player {
-    pub fn new(position: Vec3, speed: f32, sensitivity: f32) -> Self {
+    pub fn new(position: Vec3, sensitivity: f32) -> Self {
         Self {
             camera: Camera::new(position, -std::f32::consts::FRAC_PI_2, 0.0),
-            speed,
             sensitivity,
             velocity: Vec3::ZERO,
             on_ground: false,
             sprinting: false,
+            sneaking: false,
             fov_multiplier: 1.0,
+            distance_walked: 0.0,
+            eye_offset: EYE_OFFSET_STAND,
         }
     }
 
-    /// Main update: mouse look → ground check → horizontal input → gravity/jump → collision sweep.
-    /// `world` is needed for AABB collision queries.
     pub fn update(&mut self, dt: f32, input: &mut InputState, world: &World) {
         // ── Mouse look ──────────────────────────────────────────────────────────
         let (rx, ry) = input.take_mouse_delta();
@@ -53,13 +61,16 @@ impl Player {
         // ── Ground check ────────────────────────────────────────────────────────
         self.on_ground = self.is_on_ground(world);
 
-        // ── Stop sprinting if we let go of W or hit a wall (velocity drops) ─────
-        if !input.is_key_pressed(KeyCode::KeyW) || (self.on_ground && self.velocity.length_squared() < 1.0) {
+        // ── Sneaking ────────────────────────────────────────────────────────────
+        self.sneaking = input.is_key_pressed(KeyCode::ShiftLeft);
+        let target_eye = if self.sneaking { EYE_OFFSET_SNEAK } else { EYE_OFFSET_STAND };
+        self.eye_offset += (target_eye - self.eye_offset) * 15.0 * dt; // smooth crouch
+
+        // ── Sprinting ───────────────────────────────────────────────────────────
+        if !input.is_key_pressed(KeyCode::KeyW) || (self.on_ground && self.velocity.length_squared() < 1.0) || self.sneaking {
             self.sprinting = false;
         }
-
-        // ── Trigger sprint with ShiftLeft ───────────────────────────────────────
-        if input.is_key_pressed(KeyCode::ShiftLeft) && input.is_key_pressed(KeyCode::KeyW) {
+        if input.is_key_pressed(KeyCode::ControlLeft) && input.is_key_pressed(KeyCode::KeyW) && !self.sneaking {
             self.sprinting = true;
         }
 
@@ -81,8 +92,8 @@ impl Player {
         if input.is_key_pressed(KeyCode::KeyD) { move_dir += right; }
         if input.is_key_pressed(KeyCode::KeyA) { move_dir -= right; }
 
-        let sprint_mult = if self.sprinting { 1.4 } else { 1.0 };
-        let target_speed = self.speed * sprint_mult;
+        let speed_mult = if self.sneaking { SNEAK_MULT } else if self.sprinting { SPRINT_MULT } else { 1.0 };
+        let target_speed = BASE_SPEED * speed_mult;
 
         // Apply acceleration
         if move_dir.length_squared() > 0.0 {
@@ -95,9 +106,6 @@ impl Player {
             let horiz_vel = glam::Vec2::new(self.velocity.x, self.velocity.z);
             if horiz_vel.length() > target_speed {
                 let capped = horiz_vel.normalize() * target_speed;
-                // Only cap if the added velocity pushes us over the limit,
-                // don't instantly brake if we were already going fast (e.g. from an explosion/jump)
-                // Actually, simple cap is fine for now
                 self.velocity.x = capped.x;
                 self.velocity.z = capped.y;
             }
@@ -105,7 +113,6 @@ impl Player {
 
         // Apply friction
         let friction = if self.on_ground { GROUND_FRICTION } else { AIR_FRICTION };
-        // Frame-rate independent decay
         let drag = (-friction * dt).exp();
         self.velocity.x *= drag;
         self.velocity.z *= drag;
@@ -113,17 +120,27 @@ impl Player {
         // ── Vertical: jump & gravity ────────────────────────────────────────────
         if self.on_ground {
             if self.velocity.y < 0.0 {
-                self.velocity.y = 0.0; // Clamp downward drift when standing
+                self.velocity.y = 0.0;
             }
-            if input.is_key_pressed(KeyCode::Space) {
+            if input.is_key_pressed(KeyCode::Space) && !self.sneaking {
                 self.velocity.y = JUMP_VELOCITY;
             }
         } else {
             self.velocity.y = (self.velocity.y + GRAVITY * dt).max(MAX_FALL_SPEED);
         }
 
+        // ── Distance Walked (for bobbing) ───────────────────────────────────────
+        let horiz_speed = glam::Vec2::new(self.velocity.x, self.velocity.z).length();
+        if self.on_ground {
+            // Speed up bobbing when sprinting
+            self.distance_walked += horiz_speed * dt * if self.sprinting { 1.2 } else { 1.0 };
+        } else {
+            // Reset bobbing slowly when jumping
+            self.distance_walked = (self.distance_walked / (std::f32::consts::PI * 2.0)).round() * std::f32::consts::PI * 2.0;
+        }
+
         // ── Dynamic FOV ─────────────────────────────────────────────────────────
-        let target_fov = if self.sprinting { 1.25 } else { 1.0 };
+        let target_fov = if self.sprinting { 1.15 } else if self.sneaking { 0.95 } else { 1.0 };
         self.fov_multiplier += (target_fov - self.fov_multiplier) * 10.0 * dt;
 
         // ── Collision-resolved movement ─────────────────────────────────────────
@@ -131,7 +148,6 @@ impl Player {
         self.sweep_move(delta, world);
     }
 
-    /// Returns the normalised look direction of the camera (for ray casting).
     pub fn look_direction(&self) -> Vec3 {
         Vec3::new(
             self.camera.pitch.cos() * self.camera.yaw.cos(),
@@ -142,29 +158,41 @@ impl Player {
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
-    /// Move along each axis independently, resolving collisions per axis.
     fn sweep_move(&mut self, delta: Vec3, world: &World) {
+        // We separate axes to slide along walls.
+        // For sneaking, if we are on ground, we prevent falling off edges.
+        let was_on_ground = self.on_ground;
+
         // X
         self.camera.position.x += delta.x;
         if self.check_aabb(world) {
             self.camera.position.x -= delta.x;
             self.velocity.x = 0.0;
+        } else if self.sneaking && was_on_ground && !self.is_on_ground(world) {
+            // Revert movement if it causes us to fall while sneaking
+            self.camera.position.x -= delta.x;
+            self.velocity.x = 0.0;
         }
-        // Y
+
+        // Y (Vertical) - sneaking doesn't prevent falling if we jump or fall from above, 
+        // but wait, Y movement is safe to apply independently.
         self.camera.position.y += delta.y;
         if self.check_aabb(world) {
             self.camera.position.y -= delta.y;
             self.velocity.y = 0.0;
         }
+
         // Z
         self.camera.position.z += delta.z;
         if self.check_aabb(world) {
             self.camera.position.z -= delta.z;
             self.velocity.z = 0.0;
+        } else if self.sneaking && was_on_ground && !self.is_on_ground(world) {
+            self.camera.position.z -= delta.z;
+            self.velocity.z = 0.0;
         }
     }
 
-    /// True if the player AABB overlaps at least one solid block.
     fn check_aabb(&self, world: &World) -> bool {
         let (min_b, max_b) = self.aabb_block_range(0.0);
         for bx in min_b.x..=max_b.x {
@@ -179,9 +207,8 @@ impl Player {
         false
     }
 
-    /// True if there is a solid block directly below the player's feet.
     fn is_on_ground(&self, world: &World) -> bool {
-        let feet_y = self.camera.position.y - EYE_OFFSET;
+        let feet_y = self.camera.position.y - self.eye_offset;
         let check_y = (feet_y - 0.05).floor() as i32;
 
         let min_bx = (self.camera.position.x - PLAYER_HALF_W + 0.001).floor() as i32;
@@ -199,10 +226,8 @@ impl Player {
         false
     }
 
-    /// Compute the inclusive block-coordinate range that the player AABB overlaps.
-    /// `shrink` reduces the half-width slightly to avoid false positives on edges.
     fn aabb_block_range(&self, shrink: f32) -> (IVec3, IVec3) {
-        let feet = self.camera.position.y - EYE_OFFSET;
+        let feet = self.camera.position.y - self.eye_offset;
         let hw = PLAYER_HALF_W - shrink;
 
         let min_x = self.camera.position.x - hw;

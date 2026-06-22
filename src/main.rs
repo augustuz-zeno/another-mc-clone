@@ -70,7 +70,6 @@ impl ApplicationHandler for App {
         // Spawn player above terrain so gravity drops them onto the surface
         let player = Player::new(
             Vec3::new(8.0, 22.0, 8.0),
-            5.0,   // walk speed (m/s)
             0.003, // mouse sensitivity
         );
 
@@ -252,6 +251,27 @@ impl ApplicationHandler for App {
                     proj.fovy = (60.0_f32 * player.fov_multiplier).to_radians();
                     cam_uni.update_view_proj(&player.camera, proj);
                     state.update_camera(cam_uni);
+
+                    // ── Hand rendering & Bobbing ───────────────────────────────
+                    state.set_hand_block(self.selected_block);
+                    
+                    let bob_walked = player.distance_walked;
+                    let bob_y = (bob_walked * 15.0).sin() * 0.05;
+                    let bob_x = (bob_walked * 7.5).cos() * 0.05;
+
+                    let hand_view = glam::Mat4::look_at_rh(glam::Vec3::ZERO, glam::Vec3::new(0.0, 0.0, -1.0), glam::Vec3::Y);
+                    let hand_proj_matrix = glam::Mat4::perspective_rh(60.0_f32.to_radians(), proj.aspect, 0.01, 10.0);
+                    
+                    let hand_scale = 0.3;
+                    let hand_model = glam::Mat4::from_translation(glam::Vec3::new(0.6 + bob_x, -0.6 + bob_y, -1.2))
+                        * glam::Mat4::from_rotation_y(-0.5)
+                        * glam::Mat4::from_rotation_x(0.3)
+                        * glam::Mat4::from_scale(glam::Vec3::splat(hand_scale))
+                        * glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5));
+                    
+                    let mut hand_uni = CameraUniform::new();
+                    hand_uni.view_proj = (hand_proj_matrix * hand_view * hand_model).to_cols_array_2d();
+                    state.update_hand_camera(&hand_uni);
 
                     match state.render() {
                         Ok(_) => {}

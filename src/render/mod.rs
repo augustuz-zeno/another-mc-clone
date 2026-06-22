@@ -171,6 +171,11 @@ pub struct State {
     // Block highlight wireframe (12 edges × 2 verts = 24 LineVertex)
     pub highlight_buffer: Option<wgpu::Buffer>,
     pub highlight_vertex_count: u32,
+
+    pub hand_mesh: Option<ChunkMesh>,
+    pub hand_block_id: u8,
+    pub hand_camera_buffer: wgpu::Buffer,
+    pub hand_camera_bind_group: wgpu::BindGroup,
 }
 
 impl State {
@@ -252,6 +257,22 @@ impl State {
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: camera_buffer.as_entire_binding(),
+            }],
+        });
+
+        // ── Hand camera uniform & bind group ──────────────────────────────────
+        let hand_camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Hand Camera Buffer"),
+            contents: bytemuck::cast_slice(&[camera_uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let hand_camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Hand Camera Bind Group"),
+            layout: &camera_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: hand_camera_buffer.as_entire_binding(),
             }],
         });
 
@@ -372,6 +393,10 @@ impl State {
             camera_bind_group,
             highlight_buffer: None,
             highlight_vertex_count: 0,
+            hand_mesh: None,
+            hand_block_id: 0,
+            hand_camera_buffer,
+            hand_camera_bind_group,
         }
     }
 
@@ -466,6 +491,42 @@ impl State {
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[*camera_uniform]));
     }
 
+    pub fn update_hand_camera(&mut self, hand_uniform: &CameraUniform) {
+        self.queue.write_buffer(&self.hand_camera_buffer, 0, bytemuck::cast_slice(&[*hand_uniform]));
+    }
+
+    pub fn set_hand_block(&mut self, block_id: u8) {
+        if self.hand_block_id == block_id && self.hand_mesh.is_some() {
+            return;
+        }
+        self.hand_block_id = block_id;
+        
+        let mut chunk = Chunk::new();
+        chunk.set_block(0, 0, 0, block_id);
+        let (vertices, indices) = generate_mesh(&chunk, glam::IVec2::ZERO);
+        
+        if vertices.is_empty() {
+            self.hand_mesh = None;
+            return;
+        }
+
+        let vertex_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Hand VB"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let index_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Hand IB"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        self.hand_mesh = Some(ChunkMesh {
+            vertex_buffer,
+            index_buffer,
+            num_indices: indices.len() as u32,
+        });
+    }
+
     // ── Render frame ──────────────────────────────────────────────────────────
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -515,6 +576,16 @@ impl State {
                 pass.set_bind_group(0, &self.camera_bind_group, &[]);
                 pass.set_vertex_buffer(0, buf.slice(..));
                 pass.draw(0..self.highlight_vertex_count, 0..1);
+            }
+
+            // Pass 3 — Hand (overlay)
+            if let Some(hand) = &self.hand_mesh {
+                pass.set_pipeline(&self.render_pipeline);
+                pass.set_bind_group(0, &self.hand_camera_bind_group, &[]);
+                // We keep the texture bind group the same
+                pass.set_vertex_buffer(0, hand.vertex_buffer.slice(..));
+                pass.set_index_buffer(hand.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..hand.num_indices, 0, 0..1);
             }
         }
 
