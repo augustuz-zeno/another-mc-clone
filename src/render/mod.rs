@@ -577,15 +577,39 @@ impl State {
                 pass.set_vertex_buffer(0, buf.slice(..));
                 pass.draw(0..self.highlight_vertex_count, 0..1);
             }
+        }
 
-            // Pass 3 — Hand (overlay)
+        // Pass 3 — Hand (overlay in a separate render pass to clear depth)
+        {
+            let mut pass2 = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Hand Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load, // Keep the rendered world
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0), // Clear depth so hand renders on top
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
             if let Some(hand) = &self.hand_mesh {
-                pass.set_pipeline(&self.render_pipeline);
-                pass.set_bind_group(0, &self.hand_camera_bind_group, &[]);
-                // We keep the texture bind group the same
-                pass.set_vertex_buffer(0, hand.vertex_buffer.slice(..));
-                pass.set_index_buffer(hand.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..hand.num_indices, 0, 0..1);
+                pass2.set_pipeline(&self.render_pipeline);
+                pass2.set_bind_group(0, &self.hand_camera_bind_group, &[]);
+                pass2.set_bind_group(1, &self.texture_array.bind_group, &[]);
+                pass2.set_vertex_buffer(0, hand.vertex_buffer.slice(..));
+                pass2.set_index_buffer(hand.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                pass2.draw_indexed(0..hand.num_indices, 0, 0..1);
             }
         }
 

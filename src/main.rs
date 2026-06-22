@@ -81,7 +81,7 @@ impl ApplicationHandler for App {
             }
         }
 
-        let projection    = Projection::new(state.size.width, state.size.height, 60.0_f32.to_radians(), 0.1, 500.0);
+        let projection    = Projection::new(state.size.width, state.size.height, 110.0_f32.to_radians(), 0.1, 500.0);
         let camera_uniform = CameraUniform::new();
 
         self.state          = Some(state);
@@ -248,7 +248,7 @@ impl ApplicationHandler for App {
                     &mut self.camera_uniform,
                 ) {
                     // Update FOV dynamically based on player sprint state
-                    proj.fovy = (60.0_f32 * player.fov_multiplier).to_radians();
+                    proj.fovy = (110.0_f32 * player.fov_multiplier).to_radians();
                     cam_uni.update_view_proj(&player.camera, proj);
                     state.update_camera(cam_uni);
 
