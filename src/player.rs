@@ -4,8 +4,8 @@ use crate::render::camera::Camera;
 use crate::world::World;
 
 // ── Physics constants ──────────────────────────────────────────────────────────
-const GRAVITY: f32 = -25.0;        // m/s²  (negative = downward)
-const JUMP_VELOCITY: f32 = 9.0;    // m/s   upward impulse on jump
+const GRAVITY: f32 = -32.0;        // m/s²  (negative = downward)
+const JUMP_VELOCITY: f32 = 8.4;    // m/s   upward impulse on jump
 const MAX_FALL_SPEED: f32 = -50.0; // terminal velocity
 const GROUND_ACCEL: f32 = 45.0;    // how fast you reach top speed
 const AIR_ACCEL: f32 = 5.0;        // less control in the air
@@ -58,8 +58,8 @@ impl Player {
             self.sprinting = false;
         }
 
-        // ── Trigger sprint with ControlLeft ─────────────────────────────────────
-        if input.is_key_pressed(KeyCode::ControlLeft) && input.is_key_pressed(KeyCode::KeyW) {
+        // ── Trigger sprint with ShiftLeft ───────────────────────────────────────
+        if input.is_key_pressed(KeyCode::ShiftLeft) && input.is_key_pressed(KeyCode::KeyW) {
             self.sprinting = true;
         }
 
@@ -123,7 +123,7 @@ impl Player {
         }
 
         // ── Dynamic FOV ─────────────────────────────────────────────────────────
-        let target_fov = if self.sprinting { 1.15 } else { 1.0 };
+        let target_fov = if self.sprinting { 1.25 } else { 1.0 };
         self.fov_multiplier += (target_fov - self.fov_multiplier) * 10.0 * dt;
 
         // ── Collision-resolved movement ─────────────────────────────────────────

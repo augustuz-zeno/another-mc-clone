@@ -1,8 +1,11 @@
 use image::GenericImageView;
 
 pub struct TextureArray {
+    #[allow(dead_code)]
     pub texture: wgpu::Texture,
+    #[allow(dead_code)]
     pub view: wgpu::TextureView,
+    #[allow(dead_code)]
     pub sampler: wgpu::Sampler,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub bind_group: wgpu::BindGroup,

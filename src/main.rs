@@ -33,7 +33,6 @@ struct App {
     last_frame:     Option<Instant>,
     /// Block type the player places on right-click.
     selected_block: u8,
-    last_w_press: Option<Instant>,
 }
 
 impl App {
@@ -47,7 +46,6 @@ impl App {
             world:          World::new(42),
             last_frame:     None,
             selected_block: BLOCK_DIRT,
-            last_w_press:   None,
         }
     }
 }
@@ -138,15 +136,7 @@ impl ApplicationHandler for App {
                             match keycode {
                                 KeyCode::Escape => event_loop.exit(),
                                 KeyCode::KeyW => {
-                                    if let Some(mut player) = self.player.take() {
-                                        if let Some(last) = self.last_w_press {
-                                            if last.elapsed().as_millis() < 300 {
-                                                player.sprinting = true;
-                                            }
-                                        }
-                                        self.last_w_press = Some(Instant::now());
-                                        self.player = Some(player);
-                                    }
+                                    // Removed double-tap W sprint logic to prevent auto-sprint on hold
                                 }
                                 // Block selector
                                 KeyCode::Digit1 => self.selected_block = BLOCK_DIRT,
