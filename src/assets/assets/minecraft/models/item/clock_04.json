@@ -1,0 +1,14 @@
+{
+	"parent": "minecraft:item/generated",
+	"textures": {
+		"1": "item/clock_04",
+		"layer0": "item/clock_04",
+		"particle": "item/clock_04"
+	},
+	"display": {
+		"fixed": {
+			"rotation": [0, 180, 0],
+			"scale": [2, 2, 2]
+		}
+	}
+}

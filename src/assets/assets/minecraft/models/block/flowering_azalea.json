@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/template_azalea",
+  "textures": {
+    "0": "minecraft:block/flowering_azalea_leaves",
+    "1": "minecraft:block/oak_log"
+  }
+}

@@ -7,6 +7,10 @@ use crate::world::World;
 const GRAVITY: f32 = -25.0;        // m/s²  (negative = downward)
 const JUMP_VELOCITY: f32 = 9.0;    // m/s   upward impulse on jump
 const MAX_FALL_SPEED: f32 = -50.0; // terminal velocity
+const GROUND_ACCEL: f32 = 45.0;    // how fast you reach top speed
+const AIR_ACCEL: f32 = 5.0;        // less control in the air
+const GROUND_FRICTION: f32 = 10.0; // deceleration multiplier
+const AIR_FRICTION: f32 = 1.0;     // horizontal drag in air
 
 // ── Player body dimensions ─────────────────────────────────────────────────────
 const PLAYER_HALF_W: f32 = 0.3;    // half-width in X and Z
@@ -19,6 +23,8 @@ pub struct Player {
     pub sensitivity: f32,
     pub velocity: Vec3,
     pub on_ground: bool,
+    pub sprinting: bool,
+    pub fov_multiplier: f32,
 }
 
 impl Player {
@@ -29,6 +35,8 @@ impl Player {
             sensitivity,
             velocity: Vec3::ZERO,
             on_ground: false,
+            sprinting: false,
+            fov_multiplier: 1.0,
         }
     }
 
@@ -44,6 +52,16 @@ impl Player {
 
         // ── Ground check ────────────────────────────────────────────────────────
         self.on_ground = self.is_on_ground(world);
+
+        // ── Stop sprinting if we let go of W or hit a wall (velocity drops) ─────
+        if !input.is_key_pressed(KeyCode::KeyW) || (self.on_ground && self.velocity.length_squared() < 1.0) {
+            self.sprinting = false;
+        }
+
+        // ── Trigger sprint with ControlLeft ─────────────────────────────────────
+        if input.is_key_pressed(KeyCode::ControlLeft) && input.is_key_pressed(KeyCode::KeyW) {
+            self.sprinting = true;
+        }
 
         // ── Horizontal movement (always relative to camera yaw) ─────────────────
         let forward = Vec3::new(
@@ -63,15 +81,34 @@ impl Player {
         if input.is_key_pressed(KeyCode::KeyD) { move_dir += right; }
         if input.is_key_pressed(KeyCode::KeyA) { move_dir -= right; }
 
+        let sprint_mult = if self.sprinting { 1.4 } else { 1.0 };
+        let target_speed = self.speed * sprint_mult;
+
+        // Apply acceleration
         if move_dir.length_squared() > 0.0 {
-            let h = move_dir.normalize() * self.speed;
-            self.velocity.x = h.x;
-            self.velocity.z = h.z;
-        } else {
-            // Instant stop on ground; keep momentum for responsiveness in air too
-            self.velocity.x = 0.0;
-            self.velocity.z = 0.0;
+            let accel_factor = if self.on_ground { GROUND_ACCEL } else { AIR_ACCEL };
+            let added_vel = move_dir.normalize() * accel_factor * dt;
+            self.velocity.x += added_vel.x;
+            self.velocity.z += added_vel.z;
+            
+            // Cap horizontal speed
+            let horiz_vel = glam::Vec2::new(self.velocity.x, self.velocity.z);
+            if horiz_vel.length() > target_speed {
+                let capped = horiz_vel.normalize() * target_speed;
+                // Only cap if the added velocity pushes us over the limit,
+                // don't instantly brake if we were already going fast (e.g. from an explosion/jump)
+                // Actually, simple cap is fine for now
+                self.velocity.x = capped.x;
+                self.velocity.z = capped.y;
+            }
         }
+
+        // Apply friction
+        let friction = if self.on_ground { GROUND_FRICTION } else { AIR_FRICTION };
+        // Frame-rate independent decay
+        let drag = (-friction * dt).exp();
+        self.velocity.x *= drag;
+        self.velocity.z *= drag;
 
         // ── Vertical: jump & gravity ────────────────────────────────────────────
         if self.on_ground {
@@ -84,6 +121,10 @@ impl Player {
         } else {
             self.velocity.y = (self.velocity.y + GRAVITY * dt).max(MAX_FALL_SPEED);
         }
+
+        // ── Dynamic FOV ─────────────────────────────────────────────────────────
+        let target_fov = if self.sprinting { 1.15 } else { 1.0 };
+        self.fov_multiplier += (target_fov - self.fov_multiplier) * 10.0 * dt;
 
         // ── Collision-resolved movement ─────────────────────────────────────────
         let delta = self.velocity * dt;

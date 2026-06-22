@@ -1,0 +1,15 @@
+{
+	"credit": "Made with Blockbench",
+	"parent": "item/handheld_rod",
+	"textures": {
+		"layer0": "item/fishing_rod"
+	},
+	"overrides": [
+		{"predicate": {"cast": 1}, "model": "item/fishing_rod_cast"}
+	],
+	"display": {
+		"fixed": {
+			"scale": [2, 2, 2]
+		}
+	}
+}

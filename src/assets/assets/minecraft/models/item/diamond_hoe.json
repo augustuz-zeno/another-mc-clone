@@ -1,0 +1,13 @@
+{
+	"credit": "Made with Blockbench",
+	"parent": "minecraft:item/handheld",
+	"textures": {
+		"layer0": "item/diamond_hoe"
+	},
+	"display": {
+		"fixed": {
+			"translation": [-1, 1, 0],
+			"scale": [2, 2, 2]
+		}
+	}
+}

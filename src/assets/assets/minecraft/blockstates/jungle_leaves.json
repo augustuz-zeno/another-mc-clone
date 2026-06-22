@@ -1,0 +1,26 @@
+{
+    "multipart": [
+        {   "when": { "OR": [
+                { "persistent": "true" },
+                { "distance": "1|2|3|4" }
+            ]},
+            "apply": [
+                { "model": "block/jungle_leaves2" },
+                { "model": "block/jungle_leaves2", "y": 90 },
+                { "model": "block/jungle_leaves2", "y": 180 },
+                { "model": "block/jungle_leaves2", "y": 270 }
+            ]
+        },
+        {   "when": { "AND": [
+                { "persistent": "false" },
+                { "distance": "5|6|7" }
+            ]},
+            "apply": [
+                { "model": "block/jungle_leaves" },
+                { "model": "block/jungle_leaves", "y": 90 },
+                { "model": "block/jungle_leaves", "y": 180 },
+                { "model": "block/jungle_leaves", "y": 270 }
+            ]
+        }
+    ]
+}

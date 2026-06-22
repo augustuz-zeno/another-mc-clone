@@ -1,0 +1,11 @@
+{
+	"credit": "Made with Blockbench",
+	"parent": "block/yellow_wool",
+	"textures": {
+		"bottom": "block/warped_planks",
+		"top": "block/warped_planks",
+		"side": "block/warped_planks",
+		"overlay": "block/warped_planks",
+                "particle":"block/warped_planks"
+	}
+}

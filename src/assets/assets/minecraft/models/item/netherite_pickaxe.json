@@ -1,0 +1,13 @@
+{
+	"credit": "Made with Blockbench",
+	"parent": "minecraft:item/handheld",
+	"textures": {
+		"layer0": "item/netherite_pickaxe"
+	},
+	"display": {
+		"fixed": {
+			"translation": [-0.5, 1.25, 0],
+			"scale": [2, 2, 2]
+		}
+	}
+}

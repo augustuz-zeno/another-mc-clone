@@ -1,0 +1,38 @@
+{
+	"format_version": "1.21.6",
+	"credit": "Made with Blockbench",
+	"parent": "block/block",
+	"textures": {
+		"particle": "block/cactus_top",
+		"top": "block/cactus_top",
+		"side": "block/cactus_side"
+	},
+	"elements": [
+		{
+			"from": [13, 2, 7],
+			"to": [19, 5, 10],
+			"rotation": {"angle": 0, "axis": "y", "origin": [13, 2, 7]},
+			"faces": {
+				"north": {"uv": [0, 0, 3, 6], "rotation": 90, "texture": "#side"},
+				"east": {"uv": [6.5, 6.5, 9.5, 9.5], "texture": "#top"},
+				"south": {"uv": [0.1875, 0, 3.1875, 6], "rotation": 90, "texture": "#side"},
+				"west": {"uv": [0, 0, 3, 3], "texture": "#missing"},
+				"up": {"uv": [0, 0, 3, 6], "rotation": 90, "texture": "#side"},
+				"down": {"uv": [6.5, 6.5, 9.5, 9.5], "rotation": 90, "texture": "#side"}
+			}
+		},
+		{
+			"from": [17, 4, 6.5],
+			"to": [21, 13, 10.5],
+			"rotation": {"angle": 0, "axis": "z", "origin": [18.5, 6, 8]},
+			"faces": {
+				"north": {"uv": [1.0625, 0, 5.5625, 9], "rotation": 180, "texture": "#side"},
+				"east": {"uv": [0.25, 0, 5.6875, 9.0625], "texture": "#side"},
+				"south": {"uv": [0.5625, 0, 5.8125, 9.1875], "texture": "#side"},
+				"west": {"uv": [1, 0, 5.5625, 9], "texture": "#side"},
+				"up": {"uv": [6.5, 6.5, 9.5, 9.5], "rotation": 90, "texture": "#top"},
+				"down": {"uv": [6.5, 6.5, 9.5, 9.5], "rotation": 90, "texture": "#top"}
+			}
+		}
+	]
+}

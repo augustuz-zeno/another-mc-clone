@@ -1,0 +1,15 @@
+{
+	"credit": "Made with Blockbench",
+	"parent": "minecraft:item/handheld",
+	"textures": {
+		"layer0": "item/diamond_pickaxe"
+	},
+	"display": {
+		"ground": {
+			"scale": [1.5, 1.5, 1.5]
+		},
+		"fixed": {
+			"scale": [2, 2, 2]
+		}
+	}
+}

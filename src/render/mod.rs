@@ -4,6 +4,7 @@ use wgpu::util::DeviceExt;
 
 pub mod camera;
 pub mod mesh;
+pub mod texture;
 
 use crate::world::Chunk;
 use camera::CameraUniform;
@@ -22,35 +23,48 @@ struct CameraUniform {
 @group(0) @binding(0)
 var<uniform> camera: CameraUniform;
 
+@group(1) @binding(0)
+var t_diffuse: texture_2d_array<f32>;
+@group(1) @binding(1)
+var s_diffuse: sampler;
+
 // ── Chunk geometry ────────────────────────────────────────────────────────────
 struct VertexInput {
     @location(0) position: vec3<f32>,
-    @location(1) color:    vec3<f32>,
-    @location(2) normal:   vec3<f32>,
+    @location(1) normal:   vec3<f32>,
+    @location(2) uv:       vec2<f32>,
+    @location(3) tex_index: u32,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) color:  vec3<f32>,
-    @location(1) normal: vec3<f32>,
+    @location(0) normal: vec3<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) tex_index: u32,
 };
 
 @vertex
 fn vs_main(model: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     out.clip_position = camera.view_proj * vec4<f32>(model.position, 1.0);
-    out.color  = model.color;
     out.normal = model.normal;
+    out.uv = model.uv;
+    out.tex_index = model.tex_index;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let tex_color = textureSample(t_diffuse, s_diffuse, in.uv, in.tex_index);
+    if (tex_color.a < 0.1) {
+        discard;
+    }
+
     let light_dir = normalize(vec3<f32>(0.4, 1.0, 0.3));
     let ambient   = 0.35;
     let diffuse   = max(dot(in.normal, light_dir), 0.0) * 0.65;
-    let shaded    = in.color * (ambient + diffuse);
-    return vec4<f32>(shaded, 1.0);
+    let shaded    = tex_color.rgb * (ambient + diffuse);
+    return vec4<f32>(shaded, tex_color.a);
 }
 
 // ── Block highlight wireframe ─────────────────────────────────────────────────
@@ -149,6 +163,7 @@ pub struct State {
 
     pub chunk_meshes: std::collections::HashMap<glam::IVec2, ChunkMesh>,
     pub depth_texture: DepthTexture,
+    pub texture_array: texture::TextureArray,
 
     pub camera_buffer: wgpu::Buffer,
     pub camera_bind_group: wgpu::BindGroup,
@@ -242,8 +257,21 @@ impl State {
 
         let depth_texture = DepthTexture::create(&device, &config, "Depth Texture");
 
+        let texture_array = texture::TextureArray::new(&device, &queue, &[
+            "src/assets/assets/minecraft/textures/block/dirt.png",
+            "src/assets/assets/minecraft/textures/block/grass_block_top.png",
+            "src/assets/assets/minecraft/textures/block/grass_block_side.png",
+            "src/assets/assets/minecraft/textures/block/stone.png",
+        ]);
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Pipeline Layout"),
+            bind_group_layouts: &[&camera_bgl, &texture_array.bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let line_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Line Pipeline Layout"),
             bind_group_layouts: &[&camera_bgl],
             push_constant_ranges: &[],
         });
@@ -289,7 +317,7 @@ impl State {
         // ── Highlight wireframe pipeline (LineList) ───────────────────────────
         let line_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Line Render Pipeline"),
-            layout: Some(&pipeline_layout),
+            layout: Some(&line_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_line"),
@@ -339,6 +367,7 @@ impl State {
             line_pipeline,
             chunk_meshes: std::collections::HashMap::new(),
             depth_texture,
+            texture_array,
             camera_buffer,
             camera_bind_group,
             highlight_buffer: None,
@@ -473,6 +502,7 @@ impl State {
             // Pass 1 — chunk geometry
             pass.set_pipeline(&self.render_pipeline);
             pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            pass.set_bind_group(1, &self.texture_array.bind_group, &[]);
             for mesh in self.chunk_meshes.values() {
                 pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);

@@ -1,0 +1,98 @@
+{
+	"credit": "Made with Blockbench",
+	"textures": {
+		"base": "block/brewing_stand_base",
+		"stand": "block/brewing_stand"
+	},
+	"elements": [
+		{
+			"from": [7, 0, 7],
+			"to": [9, 16, 9],
+			"faces": {
+				"north": {"uv": [7, 1.10156, 9, 12.33594], "texture": "#stand"},
+				"east": {"uv": [7, 1.10156, 9, 12.33594], "texture": "#stand"},
+				"south": {"uv": [7, 1.10156, 9, 12.33594], "texture": "#stand"},
+				"west": {"uv": [7, 1.10156, 9, 12.33594], "texture": "#stand"},
+				"up": {"uv": [7, 6.10156, 9, 5.33594], "texture": "#stand"},
+				"down": {"uv": [7, 6.10156, 9, 5.33594], "texture": "#stand"}
+			}
+		},
+		{
+			"from": [9, 0, 5],
+			"to": [15, 2, 11],
+			"faces": {
+				"north": {"uv": [9.08594, 12.30469, 14.41406, 13.90625], "texture": "#base"},
+				"east": {"uv": [9.15625, 12.39063, 14.4375, 13.99219], "texture": "#base"},
+				"south": {"uv": [9.08594, 12.30469, 14.50781, 13.94531], "texture": "#base"},
+				"west": {"uv": [9.10938, 12.30469, 14.4375, 13.99219], "texture": "#base"},
+				"up": {"uv": [9, 5, 15, 11], "texture": "#base"},
+				"down": {"uv": [9, 5, 15, 11], "texture": "#base", "cullface": "down"}
+			}
+		},
+		{
+			"from": [1, 0, 1],
+			"to": [7, 2, 7],
+			"faces": {
+				"north": {"uv": [9.17969, 12.30469, 14.55469, 13.89844], "texture": "#base"},
+				"east": {"uv": [9.17969, 12.30469, 14.55469, 13.89844], "texture": "#base"},
+				"south": {"uv": [9.17969, 12.30469, 14.55469, 13.89844], "texture": "#base"},
+				"west": {"uv": [9.17969, 12.30469, 14.55469, 13.89844], "texture": "#base"},
+				"up": {"uv": [1, 1, 7, 7], "texture": "#base"},
+				"down": {"uv": [1, 1, 7, 7], "texture": "#base", "cullface": "down"}
+			}
+		},
+		{
+			"from": [1, 0, 9],
+			"to": [7, 2, 15],
+			"faces": {
+				"north": {"uv": [9.13281, 12.39063, 14.50781, 14.03906], "texture": "#base"},
+				"east": {"uv": [9.09375, 12.35156, 14.50977, 14.03516], "texture": "#base"},
+				"south": {"uv": [9.13281, 12.42969, 14.46094, 14.03125], "texture": "#base"},
+				"west": {"uv": [9.09375, 12.35156, 14.50977, 14.03516], "texture": "#base"},
+				"up": {"uv": [1, 9, 7, 14.91406], "texture": "#base"},
+				"down": {"uv": [1, 9, 7, 14.95313], "texture": "#base", "cullface": "down"}
+			}
+		}
+	],
+	"groups": [
+		{
+			"name": "brewing_stand",
+			"origin": [8, 8, 8],
+			"color": 0,
+			"children": [
+				{
+					"name": "brewing_stand",
+					"origin": [8, 8, 8],
+					"color": 0,
+					"children": [0, 1, 2, 3]
+				}
+			]
+		},
+		{
+			"name": "brewing_stand_bottle0",
+			"origin": [8, 8, 8],
+			"color": 0,
+			"children": [
+				{
+					"name": "brewing_stand_bottle0",
+					"origin": [8, 8, 8],
+					"color": 0,
+					"children": []
+				}
+			]
+		},
+		{
+			"name": "brewing_stand_empty0",
+			"origin": [8, 8, 8],
+			"color": 0,
+			"children": [
+				{
+					"name": "brewing_stand_empty0",
+					"origin": [8, 8, 8],
+					"color": 0,
+					"children": []
+				}
+			]
+		}
+	]
+}

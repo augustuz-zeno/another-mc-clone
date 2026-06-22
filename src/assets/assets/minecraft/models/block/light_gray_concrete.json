@@ -1,0 +1,11 @@
+{
+	"credit": "Made with Blockbench",
+	"parent": "block/yellow_wool",
+	"textures": {
+		"bottom": "block/light_gray_concrete",
+		"top": "block/light_gray_concrete",
+		"side": "block/light_gray_concrete",
+		"overlay": "block/light_gray_concrete",
+                "particle": "block/light_gray_concrete"
+	}
+}

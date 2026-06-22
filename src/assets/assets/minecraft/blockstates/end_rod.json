@@ -1,0 +1,25 @@
+{
+  "variants": {
+    "facing=down": {
+      "model": "minecraft:block/ceiling_lamp"
+    },
+    "facing=east": {
+      "model": "minecraft:block/tube_lamp",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "minecraft:block/tube_lamp"
+    },
+    "facing=south": {
+      "model": "minecraft:block/tube_lamp",
+      "y": 180
+    },
+    "facing=up": {
+      "model": "minecraft:block/lamp"
+    },
+    "facing=west": {
+      "model": "minecraft:block/tube_lamp",
+      "y": 270
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "variants": {
+    "": [
+        {"model": "minecraft:block/lodestone"},
+        {"model": "minecraft:block/lodestone", "y":90, "uvlock":false},
+        {"model": "minecraft:block/lodestone", "y":180, "uvlock":false},
+        {"model": "minecraft:block/lodestone", "y":270, "uvlock":false},
+        {"model": "minecraft:block/lodestone", "y":360, "uvlock":false}
+    ]
+  }
+}

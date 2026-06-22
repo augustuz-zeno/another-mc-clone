@@ -1,0 +1,11 @@
+{
+	"credit": "Made with Blockbench",
+	"parent": "block/yellow_wool",
+	"textures": {
+		"bottom": "block/lime_terracotta",
+		"top": "block/lime_terracotta",
+		"side": "block/lime_terracotta",
+		"overlay": "block/lime_terracotta",
+                "particle": "block/lime_terracotta"
+	}
+}

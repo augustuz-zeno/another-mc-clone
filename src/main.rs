@@ -33,6 +33,7 @@ struct App {
     last_frame:     Option<Instant>,
     /// Block type the player places on right-click.
     selected_block: u8,
+    last_w_press: Option<Instant>,
 }
 
 impl App {
@@ -46,6 +47,7 @@ impl App {
             world:          World::new(42),
             last_frame:     None,
             selected_block: BLOCK_DIRT,
+            last_w_press:   None,
         }
     }
 }
@@ -135,6 +137,17 @@ impl ApplicationHandler for App {
                             use winit::keyboard::KeyCode;
                             match keycode {
                                 KeyCode::Escape => event_loop.exit(),
+                                KeyCode::KeyW => {
+                                    if let Some(mut player) = self.player.take() {
+                                        if let Some(last) = self.last_w_press {
+                                            if last.elapsed().as_millis() < 300 {
+                                                player.sprinting = true;
+                                            }
+                                        }
+                                        self.last_w_press = Some(Instant::now());
+                                        self.player = Some(player);
+                                    }
+                                }
                                 // Block selector
                                 KeyCode::Digit1 => self.selected_block = BLOCK_DIRT,
                                 KeyCode::Digit2 => self.selected_block = BLOCK_GRASS,
@@ -242,9 +255,11 @@ impl ApplicationHandler for App {
                 if let (Some(state), Some(player), Some(proj), Some(cam_uni)) = (
                     &mut self.state,
                     &self.player,
-                    &self.projection,
+                    &mut self.projection,
                     &mut self.camera_uniform,
                 ) {
+                    // Update FOV dynamically based on player sprint state
+                    proj.fovy = (60.0_f32 * player.fov_multiplier).to_radians();
                     cam_uni.update_view_proj(&player.camera, proj);
                     state.update_camera(cam_uni);
 

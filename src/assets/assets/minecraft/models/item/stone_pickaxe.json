@@ -1,0 +1,13 @@
+{
+	"credit": "Made with Blockbench",
+	"parent": "minecraft:item/handheld",
+	"textures": {
+		"layer0": "item/stone_pickaxe"
+	},
+	"display": {
+		"fixed": {
+			"translation": [0, 1.5, 0],
+			"scale": [2, 2, 2]
+		}
+	}
+}
