@@ -1,18 +1,7 @@
 {
   "pack": {
-    "pack_format": 80,
-    "supported_formats": [
-      15,
-      64
-    ],
-    "min_format": [
-      15,
-      0
-    ],
-    "max_format": [
-      130,
-      114514
-    ],
-    "description": "An fps-friendly realistic resource pack."
+    "description": "The go-to 64x texture pack for Minecraft. By HARYA_ and many others.",
+    "min_format": 79,
+    "max_format": 100
   }
 }

@@ -1,5 +1,0 @@
-{
-  "parent": "minecraft:block/template_potted_azalea_bush",
-  "textures": {
-    "0": "minecraft:block/flowering_azalea_leaves"  }
-}
