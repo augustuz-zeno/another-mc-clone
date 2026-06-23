@@ -279,10 +279,10 @@ impl State {
         let depth_texture = DepthTexture::create(&device, &config, "Depth Texture");
 
         let texture_array = texture::TextureArray::new(&device, &queue, &[
-            "src/assets/assets/minecraft/textures/block/dirt.png",
-            "src/assets/assets/minecraft/textures/block/grass_block_top.png",
-            "src/assets/assets/minecraft/textures/block/grass_block_side.png",
-            "src/assets/assets/minecraft/textures/block/stone.png",
+            "src/assets/minecraft/textures/block/dirt.png",
+            "src/assets/minecraft/textures/block/grass_block_top.png",
+            "src/assets/minecraft/textures/block/grass_block_side.png",
+            "src/assets/minecraft/textures/block/stone.png",
         ]);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

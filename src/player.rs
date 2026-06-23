@@ -64,7 +64,11 @@ impl Player {
         // ── Sneaking ────────────────────────────────────────────────────────────
         self.sneaking = input.is_key_pressed(KeyCode::ShiftLeft);
         let target_eye = if self.sneaking { EYE_OFFSET_SNEAK } else { EYE_OFFSET_STAND };
+        let old_eye = self.eye_offset;
         self.eye_offset += (target_eye - self.eye_offset) * 15.0 * dt; // smooth crouch
+        
+        // Compensate camera Y so the player's feet (and AABB) don't move when crouching/uncrouching
+        self.camera.position.y += self.eye_offset - old_eye;
 
         // ── Sprinting ───────────────────────────────────────────────────────────
         if !input.is_key_pressed(KeyCode::KeyW) || (self.on_ground && self.velocity.length_squared() < 1.0) || self.sneaking {
