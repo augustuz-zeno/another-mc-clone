@@ -115,8 +115,28 @@ fn vs_line(model: LineVertex) -> @builtin(position) vec4<f32> {
 fn fs_line() -> @location(0) vec4<f32> {
     return vec4<f32>(0.0, 0.0, 0.0, 1.0); // solid black edges
 }
+"#;
 
-// ── Cloud geometry ────────────────────────────────────────────────────────────
+// Cloud shader is separate because fog is at group(1), not group(2)
+// (cloud pipeline has: group 0 = camera, group 1 = fog — no texture array)
+const CLOUD_SHADER_SRC: &str = r#"
+struct CameraUniform {
+    view_proj: mat4x4<f32>,
+};
+@group(0) @binding(0)
+var<uniform> camera: CameraUniform;
+
+struct FogUniform {
+    fog_start:  f32,
+    fog_end:    f32,
+    sky_r:      f32,
+    sky_g:      f32,
+    sky_b:      f32,
+    _pad:       f32,
+};
+@group(1) @binding(0)
+var<uniform> fog: FogUniform;
+
 struct CloudVertex {
     @location(0) position: vec3<f32>,
 };
@@ -136,14 +156,12 @@ fn vs_cloud(model: CloudVertex) -> CloudOutput {
 
 @fragment
 fn fs_cloud(in: CloudOutput) -> @location(0) vec4<f32> {
-    let sky_color = vec3<f32>(fog.sky_r, fog.sky_g, fog.sky_b);
-    // Clouds fade into fog at distance
+    let sky_color  = vec3<f32>(fog.sky_r, fog.sky_g, fog.sky_b);
     let fog_factor = clamp((in.view_dist - fog.fog_start) / (fog.fog_end - fog.fog_start), 0.0, 1.0);
     let cloud_color = mix(vec3<f32>(1.0, 1.0, 1.0), sky_color, fog_factor);
     return vec4<f32>(cloud_color, 0.85);
 }
 "#;
-
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CloudVertex — position-only for cloud geometry
