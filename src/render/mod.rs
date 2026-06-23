@@ -176,6 +176,9 @@ pub struct State {
     pub hand_block_id: u8,
     pub hand_camera_buffer: wgpu::Buffer,
     pub hand_camera_bind_group: wgpu::BindGroup,
+
+    pub crosshair_pipeline: wgpu::RenderPipeline,
+    pub crosshair_texture: texture::SingleTexture,
 }
 
 impl State {
@@ -279,10 +282,10 @@ impl State {
         let depth_texture = DepthTexture::create(&device, &config, "Depth Texture");
 
         let texture_array = texture::TextureArray::new(&device, &queue, &[
-            "src/assets/minecraft/textures/block/dirt.png",
-            "src/assets/minecraft/textures/block/grass_block_top.png",
-            "src/assets/minecraft/textures/block/grass_block_side.png",
-            "src/assets/minecraft/textures/block/stone.png",
+            "src/assets/textures/block/dirt.png",
+            "src/assets/textures/block/grass_block_top.png",
+            "src/assets/textures/block/grass_block_side.png",
+            "src/assets/textures/block/stone.png",
         ]);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -377,6 +380,47 @@ impl State {
             cache: None,
         });
 
+        // ── Crosshair pipeline ────────────────────────────────────────────────
+        let crosshair_texture = texture::SingleTexture::new(&device, &queue, "src/assets/textures/gui/sprites/hud/crosshair.png");
+        let crosshair_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Crosshair Shader"),
+            source: wgpu::ShaderSource::Wgsl(CROSSHAIR_SHADER.into()),
+        });
+        let crosshair_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Crosshair Pipeline Layout"),
+            bind_group_layouts: &[&crosshair_texture.bind_group_layout],
+            push_constant_ranges: &[],
+        });
+        let crosshair_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Crosshair Pipeline"),
+            layout: Some(&crosshair_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &crosshair_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &crosshair_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
         Self {
             surface,
             device,
@@ -397,6 +441,8 @@ impl State {
             hand_block_id: 0,
             hand_camera_buffer,
             hand_camera_bind_group,
+            crosshair_pipeline,
+            crosshair_texture,
         }
     }
 
@@ -611,6 +657,11 @@ impl State {
                 pass2.set_index_buffer(hand.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 pass2.draw_indexed(0..hand.num_indices, 0, 0..1);
             }
+
+            // Crosshair
+            pass2.set_pipeline(&self.crosshair_pipeline);
+            pass2.set_bind_group(0, &self.crosshair_texture.bind_group, &[]);
+            pass2.draw(0..6, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -618,3 +669,36 @@ impl State {
         Ok(())
     }
 }
+
+const CROSSHAIR_SHADER: &str = r#"
+struct CrosshairOutput {
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> CrosshairOutput {
+    var x = f32(0.0);
+    var y = f32(0.0);
+    if (in_vertex_index == 1u || in_vertex_index == 4u || in_vertex_index == 5u) { x = 1.0; } else { x = -1.0; }
+    if (in_vertex_index == 2u || in_vertex_index == 3u || in_vertex_index == 5u) { y = 1.0; } else { y = -1.0; }
+    
+    var out: CrosshairOutput;
+    // Scale for crosshair (approx 16x16 on a 1280x720 screen)
+    // 16 / 1280 = 0.0125
+    // 16 / 720 = 0.0222
+    out.clip_position = vec4<f32>(x * 0.0125, y * 0.0222, 0.0, 1.0);
+    out.uv = vec2<f32>((x + 1.0) * 0.5, (1.0 - y) * 0.5);
+    return out;
+}
+
+@group(0) @binding(0) var t_crosshair: texture_2d<f32>;
+@group(0) @binding(1) var s_crosshair: sampler;
+
+@fragment
+fn fs_main(in: CrosshairOutput) -> @location(0) vec4<f32> {
+    let color = textureSample(t_crosshair, s_crosshair, in.uv);
+    if (color.a < 0.1) { discard; }
+    return color;
+}
+"#;
