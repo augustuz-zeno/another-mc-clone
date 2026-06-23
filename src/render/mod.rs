@@ -566,17 +566,22 @@ impl State {
         });
 
         // ── Cloud pipeline (semi-transparent TriangleList) ────────────────────
+        // Cloud shader is compiled separately: fog is at group(1), not group(2)
+        let cloud_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Cloud Shader"),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(CLOUD_SHADER_SRC)),
+        });
         let cloud_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Cloud Pipeline"),
             layout: Some(&cloud_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
+                module: &cloud_shader,
                 entry_point: Some("vs_cloud"),
                 buffers: &[CloudVertex::desc()],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
+                module: &cloud_shader,
                 entry_point: Some("fs_cloud"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
