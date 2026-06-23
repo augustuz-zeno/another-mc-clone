@@ -28,30 +28,51 @@ var t_diffuse: texture_2d_array<f32>;
 @group(1) @binding(1)
 var s_diffuse: sampler;
 
+// ── Fog uniform ──────────────────────────────────────────────────────────────
+struct FogUniform {
+    fog_start:  f32,
+    fog_end:    f32,
+    sky_r:      f32,
+    sky_g:      f32,
+    sky_b:      f32,
+    _pad:       f32,
+};
+@group(2) @binding(0)
+var<uniform> fog: FogUniform;
+
 // ── Chunk geometry ────────────────────────────────────────────────────────────
 struct VertexInput {
-    @location(0) position: vec3<f32>,
-    @location(1) normal:   vec3<f32>,
-    @location(2) uv:       vec2<f32>,
+    @location(0) position:  vec3<f32>,
+    @location(1) normal:    vec3<f32>,
+    @location(2) uv:        vec2<f32>,
     @location(3) tex_index: u32,
+    @location(4) tint:      u32,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) normal: vec3<f32>,
-    @location(1) uv: vec2<f32>,
+    @location(0) normal:    vec3<f32>,
+    @location(1) uv:        vec2<f32>,
     @location(2) @interpolate(flat) tex_index: u32,
+    @location(3) @interpolate(flat) tint:      u32,
+    @location(4) view_dist: f32,
 };
 
 @vertex
 fn vs_main(model: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     out.clip_position = camera.view_proj * vec4<f32>(model.position, 1.0);
-    out.normal = model.normal;
-    out.uv = model.uv;
-    out.tex_index = model.tex_index;
+    out.normal     = model.normal;
+    out.uv         = model.uv;
+    out.tex_index  = model.tex_index;
+    out.tint       = model.tint;
+    // For fog: use clip-space W as an approximation of view-space depth
+    out.view_dist  = out.clip_position.w;
     return out;
 }
+
+// Grass colormap colour (MC temperate biome): #5DA833 = (93/255, 168/255, 51/255)
+const GRASS_TINT: vec3<f32> = vec3<f32>(0.365, 0.659, 0.200);
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
@@ -60,10 +81,23 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
+    // Apply grass-green colormap tint to grayscale grass textures
+    var rgb = tex_color.rgb;
+    if (in.tint == 1u) {
+        rgb = rgb * GRASS_TINT;
+    }
+
+    // Simple directional + ambient lighting
     let light_dir = normalize(vec3<f32>(0.4, 1.0, 0.3));
-    let ambient   = 0.35;
-    let diffuse   = max(dot(in.normal, light_dir), 0.0) * 0.65;
-    let shaded    = tex_color.rgb * (ambient + diffuse);
+    let ambient    = 0.35;
+    let diffuse    = max(dot(in.normal, light_dir), 0.0) * 0.65;
+    var shaded     = rgb * (ambient + diffuse);
+
+    // Distance fog  (linear)
+    let sky_color = vec3<f32>(fog.sky_r, fog.sky_g, fog.sky_b);
+    let fog_factor = clamp((in.view_dist - fog.fog_start) / (fog.fog_end - fog.fog_start), 0.0, 1.0);
+    shaded = mix(shaded, sky_color, fog_factor);
+
     return vec4<f32>(shaded, tex_color.a);
 }
 
@@ -81,7 +115,84 @@ fn vs_line(model: LineVertex) -> @builtin(position) vec4<f32> {
 fn fs_line() -> @location(0) vec4<f32> {
     return vec4<f32>(0.0, 0.0, 0.0, 1.0); // solid black edges
 }
+
+// ── Cloud geometry ────────────────────────────────────────────────────────────
+struct CloudVertex {
+    @location(0) position: vec3<f32>,
+};
+
+struct CloudOutput {
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0) view_dist: f32,
+};
+
+@vertex
+fn vs_cloud(model: CloudVertex) -> CloudOutput {
+    var out: CloudOutput;
+    out.clip_position = camera.view_proj * vec4<f32>(model.position, 1.0);
+    out.view_dist     = out.clip_position.w;
+    return out;
+}
+
+@fragment
+fn fs_cloud(in: CloudOutput) -> @location(0) vec4<f32> {
+    let sky_color = vec3<f32>(fog.sky_r, fog.sky_g, fog.sky_b);
+    // Clouds fade into fog at distance
+    let fog_factor = clamp((in.view_dist - fog.fog_start) / (fog.fog_end - fog.fog_start), 0.0, 1.0);
+    let cloud_color = mix(vec3<f32>(1.0, 1.0, 1.0), sky_color, fog_factor);
+    return vec4<f32>(cloud_color, 0.85);
+}
 "#;
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CloudVertex — position-only for cloud geometry
+// ══════════════════════════════════════════════════════════════════════════════
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct CloudVertex {
+    position: [f32; 3],
+}
+
+impl CloudVertex {
+    const ATTRIBS: [wgpu::VertexAttribute; 1] =
+        wgpu::vertex_attr_array![0 => Float32x3];
+
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &Self::ATTRIBS,
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FogUniform — sent to GPU each frame
+// ══════════════════════════════════════════════════════════════════════════════
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct FogUniform {
+    fog_start: f32,
+    fog_end:   f32,
+    sky_r:     f32,
+    sky_g:     f32,
+    sky_b:     f32,
+    _pad:      f32,
+}
+
+impl FogUniform {
+    fn new(fog_start: f32, fog_end: f32) -> Self {
+        Self {
+            fog_start,
+            fog_end,
+            sky_r: 0.53,
+            sky_g: 0.81,
+            sky_b: 0.92,
+            _pad:  0.0,
+        }
+    }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // LineVertex — minimal format for wireframe lines
@@ -104,6 +215,7 @@ impl LineVertex {
         }
     }
 }
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Depth texture helper
@@ -160,6 +272,7 @@ pub struct State {
 
     pub render_pipeline: wgpu::RenderPipeline,
     pub line_pipeline: wgpu::RenderPipeline,
+    pub cloud_pipeline: wgpu::RenderPipeline,
 
     pub chunk_meshes: std::collections::HashMap<glam::IVec2, ChunkMesh>,
     pub depth_texture: DepthTexture,
@@ -167,6 +280,17 @@ pub struct State {
 
     pub camera_buffer: wgpu::Buffer,
     pub camera_bind_group: wgpu::BindGroup,
+
+    // Fog uniform
+    pub fog_buffer: wgpu::Buffer,
+    pub fog_bind_group: wgpu::BindGroup,
+    pub fog_start: f32,
+    pub fog_end: f32,
+
+    // Cloud state
+    pub cloud_vertex_buffer: Option<wgpu::Buffer>,
+    pub cloud_vertex_count: u32,
+    pub cloud_offset: f32,     // drifts slowly over time (world units)
 
     // Block highlight wireframe (12 edges × 2 verts = 24 LineVertex)
     pub highlight_buffer: Option<wgpu::Buffer>,
@@ -180,6 +304,7 @@ pub struct State {
     pub crosshair_pipeline: wgpu::RenderPipeline,
     pub crosshair_texture: texture::SingleTexture,
 }
+
 
 impl State {
     pub async fn new(window: Window) -> Self {
@@ -288,9 +413,41 @@ impl State {
             "src/assets/textures/block/stone.png",
         ]);
 
+        // ── Fog uniform & bind group ──────────────────────────────────────────
+        const RENDER_DIST_BLOCKS: f32 = 4.0 * 16.0; // render_distance * chunk_size
+        let fog_start = RENDER_DIST_BLOCKS * 0.45;
+        let fog_end   = RENDER_DIST_BLOCKS * 0.85;
+        let fog_data  = FogUniform::new(fog_start, fog_end);
+        let fog_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Fog Buffer"),
+            contents: bytemuck::cast_slice(&[fog_data]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let fog_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Fog BGL"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let fog_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Fog Bind Group"),
+            layout: &fog_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: fog_buffer.as_entire_binding(),
+            }],
+        });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Pipeline Layout"),
-            bind_group_layouts: &[&camera_bgl, &texture_array.bind_group_layout],
+            bind_group_layouts: &[&camera_bgl, &texture_array.bind_group_layout, &fog_bgl],
             push_constant_ranges: &[],
         });
 
@@ -299,6 +456,13 @@ impl State {
             bind_group_layouts: &[&camera_bgl],
             push_constant_ranges: &[],
         });
+
+        let cloud_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Cloud Pipeline Layout"),
+            bind_group_layouts: &[&camera_bgl, &fog_bgl],
+            push_constant_ranges: &[],
+        });
+
 
         // ── Chunk geometry pipeline (TriangleList) ────────────────────────────
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -380,6 +544,43 @@ impl State {
             cache: None,
         });
 
+        // ── Cloud pipeline (semi-transparent TriangleList) ────────────────────
+        let cloud_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Cloud Pipeline"),
+            layout: Some(&cloud_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_cloud"),
+                buffers: &[CloudVertex::desc()],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_cloud"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,  // clouds visible from below
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DepthTexture::DEPTH_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
         // ── Crosshair pipeline ────────────────────────────────────────────────
         let crosshair_texture = texture::SingleTexture::new(&device, &queue, "src/assets/textures/gui/sprites/hud/crosshair.png");
         let crosshair_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -436,11 +637,19 @@ impl State {
             window,
             render_pipeline,
             line_pipeline,
+            cloud_pipeline,
             chunk_meshes: std::collections::HashMap::new(),
             depth_texture,
             texture_array,
             camera_buffer,
             camera_bind_group,
+            fog_buffer,
+            fog_bind_group,
+            fog_start,
+            fog_end,
+            cloud_vertex_buffer: None,
+            cloud_vertex_count: 0,
+            cloud_offset: 0.0,
             highlight_buffer: None,
             highlight_vertex_count: 0,
             hand_mesh: None,
@@ -451,6 +660,7 @@ impl State {
             crosshair_texture,
         }
     }
+
 
     // ── Chunk mesh management ─────────────────────────────────────────────────
 
@@ -616,13 +826,23 @@ impl State {
             pass.set_pipeline(&self.render_pipeline);
             pass.set_bind_group(0, &self.camera_bind_group, &[]);
             pass.set_bind_group(1, &self.texture_array.bind_group, &[]);
+            pass.set_bind_group(2, &self.fog_bind_group, &[]);
             for mesh in self.chunk_meshes.values() {
                 pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..mesh.num_indices, 0, 0..1);
             }
 
-            // Pass 2 — block highlight wireframe (if any)
+            // Pass 2 — clouds (before highlight so they're affected by depth)
+            if let Some(cloud_buf) = &self.cloud_vertex_buffer {
+                pass.set_pipeline(&self.cloud_pipeline);
+                pass.set_bind_group(0, &self.camera_bind_group, &[]);
+                pass.set_bind_group(1, &self.fog_bind_group, &[]);
+                pass.set_vertex_buffer(0, cloud_buf.slice(..));
+                pass.draw(0..self.cloud_vertex_count, 0..1);
+            }
+
+            // Pass 3 — block highlight wireframe (if any)
             if let Some(buf) = &self.highlight_buffer {
                 pass.set_pipeline(&self.line_pipeline);
                 pass.set_bind_group(0, &self.camera_bind_group, &[]);
@@ -659,6 +879,7 @@ impl State {
                 pass2.set_pipeline(&self.render_pipeline);
                 pass2.set_bind_group(0, &self.hand_camera_bind_group, &[]);
                 pass2.set_bind_group(1, &self.texture_array.bind_group, &[]);
+                pass2.set_bind_group(2, &self.fog_bind_group, &[]);
                 pass2.set_vertex_buffer(0, hand.vertex_buffer.slice(..));
                 pass2.set_index_buffer(hand.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 pass2.draw_indexed(0..hand.num_indices, 0, 0..1);
@@ -673,6 +894,90 @@ impl State {
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
         Ok(())
+    }
+
+    // ── Cloud update ───────────────────────────────────────────────────────────────
+
+    /// Rebuild cloud geometry centered around `player_pos`.
+    /// `dt` advances the slow cloud-drift animation.
+    pub fn update_clouds(&mut self, player_pos: glam::Vec3, dt: f32) {
+        // Drift clouds slowly in +X direction
+        self.cloud_offset += dt * 2.0; // 2 blocks per second
+
+        let cloud_y: f32 = 128.0; // cloud layer height
+        // Cloud pattern: a 2D grid of patches — roughly like MC Beta
+        // Each "patch" is one flat box (width=12, height=4, depth=12)
+        const PATCH_W: f32 = 12.0;
+        const PATCH_D: f32 = 12.0;
+        const CLOUD_H: f32 = 4.0;
+        const SPACING: f32 = 18.0; // gap between cloud centres
+        const RADIUS:  i32  = 6;   // patches in each direction
+
+        // Deterministic pattern using a simple hash
+        let hash = |ix: i32, iz: i32| -> bool {
+            let v = (ix.wrapping_mul(73856093)) ^ (iz.wrapping_mul(19349663));
+            (v & 3) != 0  // 75% density
+        };
+
+        let mut verts: Vec<CloudVertex> = Vec::new();
+
+        let cx = ((player_pos.x + self.cloud_offset) / SPACING).floor() as i32;
+        let cz = (player_pos.z / SPACING).floor() as i32;
+
+        for di in -RADIUS..=RADIUS {
+            for dk in -RADIUS..=RADIUS {
+                let pi = cx + di;
+                let pk = cz + dk;
+                if !hash(pi, pk) { continue; }
+
+                let wx = pi as f32 * SPACING - self.cloud_offset;
+                let wz = pk as f32 * SPACING;
+
+                let x0 = wx - PATCH_W * 0.5;
+                let x1 = wx + PATCH_W * 0.5;
+                let z0 = wz - PATCH_D * 0.5;
+                let z1 = wz + PATCH_D * 0.5;
+                let y0 = cloud_y;
+                let y1 = cloud_y + CLOUD_H;
+
+                // Top face (two triangles)
+                macro_rules! push_quad {
+                    ($a:expr, $b:expr, $c:expr, $d:expr) => {{
+                        verts.push(CloudVertex { position: $a });
+                        verts.push(CloudVertex { position: $b });
+                        verts.push(CloudVertex { position: $c });
+                        verts.push(CloudVertex { position: $a });
+                        verts.push(CloudVertex { position: $c });
+                        verts.push(CloudVertex { position: $d });
+                    }}
+                }
+                // Top
+                push_quad!([x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]);
+                // Bottom
+                push_quad!([x0, y0, z1], [x0, y0, z0], [x1, y0, z0], [x1, y0, z1]);
+                // Front (+z)
+                push_quad!([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]);
+                // Back (-z)
+                push_quad!([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]);
+                // Left (-x)
+                push_quad!([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]);
+                // Right (+x)
+                push_quad!([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]);
+            }
+        }
+
+        if verts.is_empty() {
+            self.cloud_vertex_buffer = None;
+            self.cloud_vertex_count = 0;
+            return;
+        }
+
+        self.cloud_vertex_count = verts.len() as u32;
+        self.cloud_vertex_buffer = Some(self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Cloud VB"),
+            contents: bytemuck::cast_slice(&verts),
+            usage: wgpu::BufferUsages::VERTEX,
+        }));
     }
 }
 

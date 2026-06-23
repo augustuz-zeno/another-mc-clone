@@ -65,6 +65,13 @@ impl InputState {
         self.mouse_just_pressed.remove(&Self::encode(button))
     }
 
+    /// Discard all pending click events that were not consumed this frame.
+    /// Call this at the end of every game-loop tick so that clicks made while
+    /// the player is out of reach do not carry over to the next frame.
+    pub fn flush_clicks(&mut self) {
+        self.mouse_just_pressed.clear();
+    }
+
     #[allow(dead_code)]
     pub fn is_mouse_held(&self, button: MouseButton) -> bool {
         self.mouse_held.contains(&Self::encode(button))

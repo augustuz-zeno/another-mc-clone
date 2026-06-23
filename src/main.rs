@@ -216,6 +216,11 @@ impl ApplicationHandler for App {
                         }
                     }
 
+                    // ── Flush any unhandled clicks (e.g. player was out of reach)
+                    // This prevents queued clicks from firing on the next frame
+                    // when the player finally enters reach distance.
+                    self.input_state.flush_clicks();
+
                     // ── Update highlight wireframe ─────────────────────────────
                     if let Some(state) = &mut self.state {
                         state.set_highlight(hit.as_ref().map(|h| h.block_pos));
@@ -251,6 +256,9 @@ impl ApplicationHandler for App {
                     proj.fovy = (110.0_f32 * player.fov_multiplier).to_radians();
                     cam_uni.update_view_proj(&player.camera, proj);
                     state.update_camera(cam_uni);
+
+                    // Update clouds (drift + rebuild geometry each frame)
+                    state.update_clouds(player.camera.position, dt);
 
                     // ── Hand rendering & Bobbing ───────────────────────────────
                     state.set_hand_block(self.selected_block);
