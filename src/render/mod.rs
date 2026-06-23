@@ -281,10 +281,13 @@ pub struct State {
     pub camera_buffer: wgpu::Buffer,
     pub camera_bind_group: wgpu::BindGroup,
 
-    // Fog uniform
+    // Fog uniform (used via GPU bind group, not read from Rust directly)
+    #[allow(dead_code)]
     pub fog_buffer: wgpu::Buffer,
     pub fog_bind_group: wgpu::BindGroup,
+    #[allow(dead_code)]
     pub fog_start: f32,
+    #[allow(dead_code)]
     pub fog_end: f32,
 
     // Cloud state
