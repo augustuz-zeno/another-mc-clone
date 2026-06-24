@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use glam::{IVec2, IVec3, Vec3};
-use crate::world::chunk::{Chunk, CHUNK_SIZE};
+use crate::world::chunk::{Chunk, CHUNK_SIZE, CHUNK_SIZE_I32};
 use crate::world::generator::TerrainGenerator;
 
 /// Result of a ray-voxel intersection query.
@@ -14,6 +14,8 @@ pub struct RaycastHit {
 pub struct World {
     pub chunks: HashMap<IVec2, Chunk>,
     generator: TerrainGenerator,
+    /// Reusable buffer — cleared each `update()` call to avoid per-frame allocations.
+    active_coords_buf: HashSet<IVec2>,
 }
 
 impl World {
@@ -21,6 +23,7 @@ impl World {
         Self {
             chunks: HashMap::new(),
             generator: TerrainGenerator::new(seed),
+            active_coords_buf: HashSet::new(),
         }
     }
 
@@ -29,18 +32,22 @@ impl World {
     /// - `Vec<IVec2>` of newly spawned/loaded chunk coordinates (which need mesh generation).
     /// - `Vec<IVec2>` of unloaded chunk coordinates (which need GPU memory cleanup).
     pub fn update(&mut self, player_pos: Vec3, render_distance: i32) -> (Vec<IVec2>, Vec<IVec2>) {
+        #[allow(clippy::cast_possible_truncation)]
         let player_chunk_x = (player_pos.x / CHUNK_SIZE as f32).floor() as i32;
+        #[allow(clippy::cast_possible_truncation)]
         let player_chunk_z = (player_pos.z / CHUNK_SIZE as f32).floor() as i32;
         let player_chunk = IVec2::new(player_chunk_x, player_chunk_z);
 
         let mut newly_loaded = Vec::new();
-        let mut active_coords = std::collections::HashSet::new();
+
+        // Reuse the HashSet buffer — avoids a fresh allocation every frame.
+        self.active_coords_buf.clear();
 
         // 1. Generate/find chunks that should be active within render distance
         for dx in -render_distance..=render_distance {
             for dz in -render_distance..=render_distance {
                 let coord = player_chunk + IVec2::new(dx, dz);
-                active_coords.insert(coord);
+                self.active_coords_buf.insert(coord);
 
                 if !self.chunks.contains_key(&coord) {
                     let chunk = self.generator.generate_chunk(coord.x, coord.y);
@@ -55,9 +62,9 @@ impl World {
         // preventing constant loading/unloading when a player moves back and forth on a border.
         let mut unloaded = Vec::new();
         self.chunks.retain(|coord, _| {
-            let keep = active_coords.contains(coord) ||
-                       ((coord.x - player_chunk.x).abs() <= render_distance + 1 &&
-                        (coord.y - player_chunk.y).abs() <= render_distance + 1);
+            let keep = self.active_coords_buf.contains(coord)
+                || ((coord.x - player_chunk.x).abs() <= render_distance + 1
+                    && (coord.y - player_chunk.y).abs() <= render_distance + 1);
             if !keep {
                 unloaded.push(*coord);
             }
@@ -70,13 +77,13 @@ impl World {
     /// Read any block by world-space coordinates.
     /// Returns 0 (Air) for unloaded chunks or out-of-vertical-bounds positions.
     pub fn get_block_world(&self, x: i32, y: i32, z: i32) -> u8 {
-        if y < 0 || y >= CHUNK_SIZE as i32 {
+        if !(0..CHUNK_SIZE_I32).contains(&y) {
             return 0;
         }
-        let cx = x.div_euclid(CHUNK_SIZE as i32);
-        let cz = z.div_euclid(CHUNK_SIZE as i32);
-        let lx = x.rem_euclid(CHUNK_SIZE as i32);
-        let lz = z.rem_euclid(CHUNK_SIZE as i32);
+        let cx = x.div_euclid(CHUNK_SIZE_I32);
+        let cz = z.div_euclid(CHUNK_SIZE_I32);
+        let lx = x.rem_euclid(CHUNK_SIZE_I32);
+        let lz = z.rem_euclid(CHUNK_SIZE_I32);
         if let Some(chunk) = self.chunks.get(&IVec2::new(cx, cz)) {
             chunk.get_block(lx, y, lz)
         } else {
@@ -88,15 +95,17 @@ impl World {
     /// Returns the chunk coordinate that was modified (for mesh rebuild), or None
     /// if the target chunk is not loaded or the position is out of bounds.
     pub fn set_block_world(&mut self, x: i32, y: i32, z: i32, block_id: u8) -> Option<IVec2> {
-        if y < 0 || y >= CHUNK_SIZE as i32 {
+        if !(0..CHUNK_SIZE_I32).contains(&y) {
             return None;
         }
-        let cx = x.div_euclid(CHUNK_SIZE as i32);
-        let cz = z.div_euclid(CHUNK_SIZE as i32);
-        let lx = x.rem_euclid(CHUNK_SIZE as i32);
-        let lz = z.rem_euclid(CHUNK_SIZE as i32);
+        let cx = x.div_euclid(CHUNK_SIZE_I32);
+        let cz = z.div_euclid(CHUNK_SIZE_I32);
+        let lx = x.rem_euclid(CHUNK_SIZE_I32);
+        let lz = z.rem_euclid(CHUNK_SIZE_I32);
         let coord = IVec2::new(cx, cz);
         if let Some(chunk) = self.chunks.get_mut(&coord) {
+            // lx, lz, y are guaranteed non-negative by rem_euclid and the y-check above.
+            #[allow(clippy::cast_sign_loss)]
             chunk.set_block(lx as usize, y as usize, lz as usize, block_id);
             Some(coord)
         } else {
@@ -114,6 +123,7 @@ impl World {
         }
 
         // Current voxel containing the ray origin.
+        #[allow(clippy::cast_possible_truncation)]
         let mut pos = IVec3::new(
             origin.x.floor() as i32,
             origin.y.floor() as i32,
@@ -135,6 +145,7 @@ impl World {
         );
 
         // t_max: ray length to reach the first voxel boundary in each axis.
+        #[allow(clippy::cast_precision_loss)]
         let mut t_max = Vec3::new(
             if dir.x >= 0.0 {
                 (pos.x as f32 + 1.0 - origin.x) / dir.x.abs().max(1e-9)
@@ -196,5 +207,55 @@ impl World {
                 normal = IVec3::new(0, 0, -step.z);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use glam::Vec3;
+
+    #[test]
+    fn test_get_set_block_world() {
+        let mut world = World::new(1);
+        world.update(Vec3::ZERO, 1);
+        
+        // Clear the chunk to ensure predictable test environment
+        if let Some(chunk) = world.chunks.get_mut(&glam::IVec2::ZERO) {
+            chunk.blocks = [0; crate::world::chunk::CHUNK_VOLUME];
+        }
+        
+        // Inside chunk 0, 0
+        assert_eq!(world.get_block_world(0, 0, 0), 0);
+        world.set_block_world(0, 0, 0, 1);
+        assert_eq!(world.get_block_world(0, 0, 0), 1);
+        
+        // Out of bounds height
+        assert_eq!(world.set_block_world(0, -1, 0, 1), None);
+        assert_eq!(world.set_block_world(0, 256, 0, 1), None);
+    }
+
+    #[test]
+    fn test_raycast() {
+        let mut world = World::new(1);
+        world.update(Vec3::ZERO, 1);
+        
+        if let Some(chunk) = world.chunks.get_mut(&glam::IVec2::ZERO) {
+            chunk.blocks = [0; crate::world::chunk::CHUNK_VOLUME];
+        }
+        
+        // Place a block at (2, 0, 0)
+        world.set_block_world(2, 0, 0, 1);
+        
+        // Raycast from origin towards +X
+        let hit = world.raycast(Vec3::new(0.0, 0.5, 0.5), Vec3::new(1.0, 0.0, 0.0), 5.0);
+        assert!(hit.is_some());
+        let hit = hit.unwrap();
+        assert_eq!(hit.block_pos, IVec3::new(2, 0, 0));
+        assert_eq!(hit.normal, IVec3::new(-1, 0, 0));
+        
+        // Miss the block (raycast straight up)
+        let miss = world.raycast(Vec3::new(0.0, 0.5, 0.5), Vec3::new(0.0, 1.0, 0.0), 5.0);
+        assert!(miss.is_none());
     }
 }

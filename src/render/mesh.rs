@@ -7,7 +7,7 @@ pub struct Vertex {
     pub normal: [f32; 3],
     pub uv: [f32; 2],
     pub tex_index: u32,
-    /// 1 = apply grass-green tint (for grayscale grass textures), 0 = no tint
+    /// 1 = apply grass-green colormap tint (for grayscale grass textures), 0 = no tint
     pub tint: u32,
 }
 
@@ -29,10 +29,10 @@ impl Vertex {
     }
 }
 
-pub const TEX_DIRT: u32 = 0;
-pub const TEX_GRASS_TOP: u32 = 1;
+pub const TEX_DIRT:       u32 = 0;
+pub const TEX_GRASS_TOP:  u32 = 1;
 pub const TEX_GRASS_SIDE: u32 = 2;
-pub const TEX_STONE: u32 = 3;
+pub const TEX_STONE:      u32 = 3;
 
 /// Helper to create a Vertex. `tint=1` means apply grass-green colormap tint.
 #[inline]
@@ -40,9 +40,20 @@ fn v(position: [f32; 3], normal: [f32; 3], uv: [f32; 2], tex_index: u32, tint: u
     Vertex { position, normal, uv, tex_index, tint }
 }
 
+/// Generate a greedy-ish mesh for a chunk.
+///
+/// All `usize → i32` and `usize → f32` casts in this function are safe:
+/// - `CHUNK_SIZE = 16`, so `x`, `y`, `z` are always in `[0, 15]`.
+/// - `vertices.len()` ≤ 6 faces × 16³ blocks × 4 verts = 24576 << `u32::MAX`.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss
+)]
 pub fn generate_mesh(chunk: &Chunk, chunk_coords: glam::IVec2) -> (Vec<Vertex>, Vec<u32>) {
-    let mut vertices = Vec::new();
-    let mut indices = Vec::new();
+    let mut vertices: Vec<Vertex> = Vec::new();
+    let mut indices:  Vec<u32>   = Vec::new();
 
     let offset_x = (chunk_coords.x * CHUNK_SIZE as i32) as f32;
     let offset_z = (chunk_coords.y * CHUNK_SIZE as i32) as f32;
@@ -62,10 +73,9 @@ pub fn generate_mesh(chunk: &Chunk, chunk_coords: glam::IVec2) -> (Vec<Vertex>, 
 
                 // (tex_top, tex_side, tex_bottom, tint_top, tint_side)
                 let (tex_top, tex_side, tex_bottom, tint_top, tint_side) = match block_id {
-                    1 => (TEX_DIRT,      TEX_DIRT,       TEX_DIRT, 0, 0),
                     2 => (TEX_GRASS_TOP, TEX_GRASS_SIDE, TEX_DIRT, 1, 1),
-                    3 => (TEX_STONE,     TEX_STONE,      TEX_STONE, 0, 0),
-                    _ => (TEX_DIRT,      TEX_DIRT,       TEX_DIRT, 0, 0),
+                    3 => (TEX_STONE,     TEX_STONE,       TEX_STONE, 0, 0),
+                    _ => (TEX_DIRT,      TEX_DIRT,        TEX_DIRT, 0, 0),
                 };
 
                 // 1. Front face (+z)
